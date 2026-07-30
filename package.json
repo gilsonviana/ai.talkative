@@ -1,0 +1,20 @@
+{
+  "name": "ai.talkative",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev:server": "npm run dev --workspace=@monorepo/server",
+    "dev:client": "npm run dev --workspace=@monorepo/client"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "workspaces": [
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@types/cors": "^2.8.19"
+  }
+}
