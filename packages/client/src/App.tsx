@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Input, Button } from "@headlessui/react";
+
 import { QAPair } from "@monorepo/shared";
 
 export default function App() {
@@ -40,23 +42,23 @@ export default function App() {
       <h1>AI Q&A Conversation</h1>
 
       <div>
-        <input
+        <Input
           type="text"
           placeholder="Enter topic"
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
           disabled={running}
         />
-        <input
+        <Input
           type="number"
           placeholder="Max turns"
           value={maxTurns}
           onChange={(e) => setMaxTurns(Number(e.target.value))}
           disabled={running}
         />
-        <button onClick={handleStart} disabled={running || !topic}>
+        <Button onClick={handleStart} disabled={running || !topic}>
           Start
-        </button>
+        </Button>
       </div>
 
       {running && <p>Active...</p>}
