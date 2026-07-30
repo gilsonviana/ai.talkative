@@ -4,6 +4,7 @@ import http from "http";
 import cors from "cors";
 
 import { askQuestion, answerQuestion } from "./lmStudio";
+import { createConversation, addTurn } from "./db";
 import { WebSocketMessage, QAPair } from "@monorepo/shared";
 
 const app = express();
@@ -31,6 +32,7 @@ app.post("/api/conversation/start", (req, res) => {
 
   const conversationId = Date.now().toString();
   conversations.set(conversationId, { topic, maxTurns });
+  createConversation(conversationId, topic, maxTurns);
 
   res.json({ conversationId });
 });
@@ -51,6 +53,8 @@ async function runConversation(conversationId: string) {
 
       // Add to context
       context += `Q: ${question}\nA: ${answer}\n\n`;
+
+      addTurn(conversationId, turn, question, answer);
 
       // Send to client
       const message: WebSocketMessage = {
