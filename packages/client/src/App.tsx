@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Input, Button } from "@headlessui/react";
 
 import { QAPair } from "@monorepo/shared";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function App() {
   const [topic, setTopic] = useState("");
@@ -66,7 +67,7 @@ export default function App() {
                   value={topic}
                   onChange={(e) => setTopic(e.target.value)}
                   disabled={running}
-                  className="w-full bg-transparent border-b border-line font-sans text-base text-ink placeholder:text-ink-soft/60 py-2 focus:outline-none focus:border-accent transition-colors data-[disabled]:opacity-50"
+                  className="h-auto w-full bg-transparent border-0 border-b border-line font-sans text-base text-ink placeholder:text-ink-soft/60 py-2 px-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:border-accent transition-colors disabled:opacity-50"
                 />
               </div>
 
@@ -85,7 +86,7 @@ export default function App() {
                   value={maxTurns}
                   onChange={(e) => setMaxTurns(Number(e.target.value))}
                   disabled={running}
-                  className="w-full bg-transparent border-b border-line font-sans text-right text-base text-ink placeholder:text-ink-soft/60 py-2 focus:outline-none focus:border-accent transition-colors data-[disabled]:opacity-50"
+                  className="h-auto w-full bg-transparent border-0 border-b border-line font-sans text-right text-base text-ink placeholder:text-ink-soft/60 py-2 px-0 focus-visible:outline-none focus-visible:ring-0 focus-visible:border-accent transition-colors disabled:opacity-50"
                 />
               </div>
             </div>
@@ -138,7 +139,7 @@ export default function App() {
         type="button"
         onClick={handleStart}
         disabled={running || !topic}
-        className="fixed bottom-0 left-0 right-0 w-full z-50 bg-ink text-paper font-sans text-sm font-medium tracking-wide py-3 hover:bg-accent transition-colors data-[disabled]:opacity-40 data-[disabled]:pointer-events-none"
+        className="fixed bottom-0 left-0 right-0 w-full z-50 h-auto rounded-none bg-ink text-paper font-sans text-sm font-medium tracking-wide py-3 hover:bg-accent transition-colors disabled:opacity-40 disabled:pointer-events-none"
       >
         Start
       </Button>
