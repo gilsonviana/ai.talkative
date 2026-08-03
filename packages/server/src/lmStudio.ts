@@ -1,9 +1,5 @@
 import OpenAI from "openai";
-
-const LM_STUDIO_URL = "http://127.0.0.1:1234/v1";
-const LM_STUDIO_MODEL = "qwen3.5-9b";
-const LM_STUDIO_TEMPERATURE = 0.01;
-const LM_STUDIO_MAX_TOKENS = 500;
+import { config } from "./config";
 
 interface Message {
   role: "user" | "assistant" | "system";
@@ -12,24 +8,26 @@ interface Message {
 
 const client = new OpenAI({
   apiKey: "not-needed",
-  baseURL: LM_STUDIO_URL,
+  baseURL: config.lmStudio.url,
 });
 
 export async function callModel(messages: Message[]): Promise<string> {
   try {
     const response = await client.chat.completions.create({
-      model: LM_STUDIO_MODEL,
+      model: config.lmStudio.model,
       messages,
-      temperature: LM_STUDIO_TEMPERATURE,
-      max_completion_tokens: LM_STUDIO_MAX_TOKENS,
+      temperature: config.lmStudio.temperature,
+      max_completion_tokens: config.lmStudio.maxTokens,
     });
 
     if (!response.choices || !response.choices[0]) {
       throw new Error("Invalid response from LM Studio");
     }
 
-    const message = response.choices[0].message as any;
-    const content = message.content || message.reasoning_content || "";
+    const message = response.choices[0].message;
+    const content = (message as { content?: string; reasoning_content?: string }).content ||
+      (message as { reasoning_content?: string }).reasoning_content ||
+      "";
 
     return content.trim();
   } catch (error) {
