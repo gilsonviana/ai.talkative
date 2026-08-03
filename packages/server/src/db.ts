@@ -1,13 +1,14 @@
 import Database from "better-sqlite3";
 import path from "path";
 import fs from "fs";
+import { config } from "./config";
 
-const dataDir = path.join(__dirname, "..", "data");
+const dataDir = path.dirname(config.database.path);
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const db = new Database(path.join(dataDir, "conversations.db"));
+const db = new Database(config.database.path);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS conversations (
@@ -32,9 +33,14 @@ export function createConversation(
   topic: string,
   maxTurns: number
 ) {
-  db.prepare(
-    "INSERT INTO conversations (id, topic, max_turns, created_at) VALUES (?, ?, ?, ?)"
-  ).run(id, topic, maxTurns, Date.now());
+  try {
+    db.prepare(
+      "INSERT INTO conversations (id, topic, max_turns, created_at) VALUES (?, ?, ?, ?)"
+    ).run(id, topic, maxTurns, Date.now());
+  } catch (error) {
+    console.error("Failed to create conversation:", error);
+    throw error;
+  }
 }
 
 export function addTurn(
@@ -43,7 +49,12 @@ export function addTurn(
   question: string,
   answer: string
 ) {
-  db.prepare(
-    "INSERT INTO qa_turns (conversation_id, turn_number, question, answer, created_at) VALUES (?, ?, ?, ?, ?)"
-  ).run(conversationId, turnNumber, question, answer, Date.now());
+  try {
+    db.prepare(
+      "INSERT INTO qa_turns (conversation_id, turn_number, question, answer, created_at) VALUES (?, ?, ?, ?, ?)"
+    ).run(conversationId, turnNumber, question, answer, Date.now());
+  } catch (error) {
+    console.error("Failed to add turn:", error);
+    throw error;
+  }
 }

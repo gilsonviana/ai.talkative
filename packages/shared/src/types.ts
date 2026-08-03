@@ -9,6 +9,6 @@ export interface QAPair {
 }
 
 export interface WebSocketMessage {
-  event: "qa" | "complete";
-  data?: QAPair;
+  event: "qa" | "complete" | "error";
+  data?: QAPair | { message: string };
 }

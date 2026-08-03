@@ -40,6 +40,12 @@ npm run build --workspace=@monorepo/client
 
 # Build server (outputs compiled JS)
 npm run build --workspace=@monorepo/server
+
+# Lint all code
+npm run lint
+
+# Format all code with Prettier
+npm run format
 ```
 
 ### From Root (Monorepo)
@@ -58,31 +64,50 @@ npm ls -a
 - **`src/types.ts`**: Defines the contract between client and server
   - `ConversationRequest`: POST body for starting a conversation
   - `QAPair`: Immutable question-answer exchange
-  - `WebSocketMessage`: Events sent from server to client (`"qa"` or `"complete"`)
+  - `WebSocketMessage`: Events sent from server to client (`"qa"`, `"complete"`, or `"error"`)
 
 ### Server Package (`packages/server/`)
 
-**`src/index.ts`** — Main server logic:
-- Express app with CORS enabled
-- WebSocket server for real-time streaming
+The server is organized into layers for clarity and maintainability:
+
+**`src/index.ts`** — Entrypoint:
+- Creates Express app with middleware and routes
+- Sets up WebSocket server
+- Loads environment config via `dotenv`
+- Registers error handlers
+
+**`src/config.ts`** — Configuration management:
+- Exports environment-based config object
+- Reads from environment variables with sensible defaults
+- Centralized source for: `PORT`, LM Studio URL/model/temperature/max-tokens, DB path
+
+**`src/routes/conversation.ts`** — HTTP route handlers:
 - `POST /api/conversation/start`: Creates a conversation session and returns `conversationId`
-- WebSocket message handler: Receives `{ conversationId }` from client and executes `runConversation()`
-- `runConversation()`: The core orchestration loop
+- Validates `topic` (required, non-empty string) and `maxTurns` (integer 1–50)
+- Returns 400 on validation failure
+
+**`src/websocket.ts`** — WebSocket orchestration:
+- `handleConnection(ws)`: Manages client connections with error handlers
+- `runConversation(conversationId)`: Core orchestration loop
   - Maintains `context` string that accumulates Q&A history
   - Iterates `maxTurns` times:
-    - Calls `askQuestion()` to generate a question
-    - Calls `answerQuestion()` to generate an answer
+    - Calls `askQuestion()` and `answerQuestion()` from `lmStudio.ts`
     - Sends `{ event: "qa", data }` to client via WebSocket
-  - Sends `{ event: "complete" }` when done
+    - Sends `{ event: "error", data: { message: string } }` on error
+  - Sends `{ event: "complete" }` when done or on failure
 
 **`src/lmStudio.ts`** — LM Studio integration:
 - `callModel(messages)`: Low-level API wrapper using OpenAI SDK against LM Studio
-  - Base URL: `http://127.0.0.1:1234/v1` (LM Studio default)
-  - Model: `qwen3.5-9b`
-  - Temperature: 0.01 (near-deterministic)
-  - Max tokens: 500
-- `askQuestion(topic, context)`: System prompt that requests a single clear question about the topic
-- `answerQuestion(topic, question, context)`: System prompt that requests a concise 2-3 sentence answer
+  - Reads base URL, model name, temperature, and max tokens from `config.ts`
+  - Wraps responses to extract `content` or `reasoning_content`
+  - Throws errors on API failures
+- `askQuestion(topic, context)`: System prompt requesting a single clear question about the topic
+- `answerQuestion(topic, question, context)`: System prompt requesting a concise 2-3 sentence answer
+
+**`src/db.ts`** — SQLite persistence:
+- `createConversation()` and `addTurn()` with error handling
+- Reads DB path from `config.ts`
+- Creates schema on first run
 
 ### Client Package (`packages/client/`)
 
@@ -100,7 +125,7 @@ npm ls -a
 ## Key Design Patterns and Constraints
 
 ### WebSocket State Management
-- Only one client connection is maintained at a time (`currentClient` in `index.ts`)
+- Only one client connection is maintained at a time (`currentClient` in `websocket.ts`)
 - Conversations are identified by `conversationId` (timestamp-based string)
 - WebSocket messages are JSON-encoded strings
 
@@ -110,14 +135,25 @@ npm ls -a
 - Context grows unbounded; no cleanup or truncation is implemented
 
 ### Configuration
-- LM Studio connection details are hardcoded in `src/lmStudio.ts`; no env vars yet
-- No build-time environment switching (dev/prod use same endpoints)
+- Centralized in `packages/server/src/config.ts`, reads from environment variables with defaults
+- Environment variables (see `packages/server/.env.example`):
+  - `PORT`: Server port (default: 3000)
+  - `LM_STUDIO_URL`: LM Studio base URL (default: http://127.0.0.1:1234/v1)
+  - `LM_STUDIO_MODEL`: Model name (default: qwen3.5-9b)
+  - `LM_STUDIO_TEMPERATURE`: Temperature 0–1 (default: 0.01)
+  - `LM_STUDIO_MAX_TOKENS`: Max tokens per response (default: 500)
+  - `DB_PATH`: SQLite database path (default: ./data/conversations.db)
+- Environment variables are loaded via `dotenv` in dev and should be set on the server in production
 - CORS is permissively enabled on the server
 
 ### Error Handling
-- Model API errors are logged to console and break the conversation loop
-- WebSocket disconnections set `currentClient` to null but don't persist conversation state
-- No retry logic or fallback strategies
+- Model API errors are logged to console and send a `{ event: "error" }` message to the client via WebSocket before breaking the conversation loop
+- Database errors are caught, logged, and rethrown to propagate to the client
+- WebSocket message parsing errors are caught and an error event is sent to the client
+- Express error middleware catches uncaught route errors and returns a 500 response
+- Process-level handlers for `uncaughtException` and `unhandledRejection` log and exit to prevent hung processes
+- WebSocket disconnections set `currentClient` to null
+- No retry logic or fallback strategies currently implemented
 
 ## Common Development Tasks
 
@@ -131,7 +167,7 @@ npm ls -a
 ### Adding a New Message Type
 
 Update `WebSocketMessage` in `packages/shared/src/types.ts`, then handle it in:
-- Server: `runConversation()` or the ws.onmessage handler in `index.ts`
+- Server: `websocket.ts` in the message handler or `runConversation()`
 - Client: `ws.onmessage` handler in `App.tsx`
 
 ### Testing Model Integration
@@ -144,8 +180,9 @@ Client styling uses Tailwind CSS v4. The entry point is likely in a global CSS f
 
 ## Notes for Future Development
 
-- **State Persistence**: Conversations are lost if the server crashes or client disconnects mid-stream
-- **Scalability**: Single-client-at-a-time design won't support concurrent users
-- **Configuration**: LM Studio URL, model name, and parameters should be moved to environment variables
-- **Validation**: Input validation on topic/maxTurns is minimal
-- **Styling**: The client uses inline styles; consider migrating to Tailwind utility classes
+- **State Persistence**: Conversations are lost if the server crashes or client disconnects mid-stream; consider persisting conversation state to the database
+- **Scalability**: Single-client-at-a-time design (`currentClient` global) won't support concurrent users; refactor to a client registry
+- **Testing**: Add unit tests for routes, WebSocket handlers, and model integration; integration tests for the full flow
+- **Retry Logic**: Model API calls have no retry strategy on transient failures
+- **Client Error Handling**: The client currently doesn't display error messages from the server; wire up error event handlers in `App.tsx`
+- **Validation**: Add stricter validation for model responses (e.g., ensure question/answer aren't empty strings)

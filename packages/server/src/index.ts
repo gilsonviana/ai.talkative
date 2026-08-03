@@ -1,98 +1,40 @@
-import express from "express";
+import "dotenv/config";
+
+import express, { Express } from "express";
 import { WebSocketServer } from "ws";
 import http from "http";
 import cors from "cors";
 
-import { askQuestion, answerQuestion } from "./lmStudio";
-import { createConversation, addTurn } from "./db";
-import { WebSocketMessage, QAPair } from "@monorepo/shared";
+import { config } from "./config";
+import conversationRouter from "./routes/conversation";
+import { handleConnection } from "./websocket";
 
-const app = express();
+const app: Express = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
 app.use(express.json());
 app.use(cors());
 
-interface ActiveConversation {
-  topic: string;
-  maxTurns: number;
-}
+app.use("/api/conversation", conversationRouter);
 
-const conversations = new Map<string, ActiveConversation>();
-let currentClient: any = null;
+wss.on("connection", handleConnection);
 
-app.post("/api/conversation/start", (req, res) => {
-  const { topic, maxTurns = 10 } = req.body;
-
-  if (!topic) {
-    res.status(400).json({ error: "topic required" });
-    return;
-  }
-
-  const conversationId = Date.now().toString();
-  conversations.set(conversationId, { topic, maxTurns });
-  createConversation(conversationId, topic, maxTurns);
-
-  res.json({ conversationId });
+app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("Unhandled error:", err);
+  res.status(500).json({ error: "Internal server error" });
 });
 
-async function runConversation(conversationId: string) {
-  const conv = conversations.get(conversationId);
-  if (!conv) return;
-
-  let context = "";
-
-  for (let turn = 0; turn < conv.maxTurns; turn++) {
-    try {
-      // Model A asks question
-      const question = await askQuestion(conv.topic, context);
-
-      // Model B answers
-      const answer = await answerQuestion(conv.topic, question, context);
-
-      // Add to context
-      context += `Q: ${question}\nA: ${answer}\n\n`;
-
-      addTurn(conversationId, turn, question, answer);
-
-      // Send to client
-      const message: WebSocketMessage = {
-        event: "qa",
-        data: { question, answer },
-      };
-      if (currentClient) {
-        currentClient.send(JSON.stringify(message));
-      }
-    } catch (error) {
-      console.error(`Turn ${turn} error:`, error);
-      break;
-    }
-  }
-
-  // Send complete signal
-  if (currentClient) {
-    currentClient.send(JSON.stringify({ event: "complete" }));
-  }
-
-  conversations.delete(conversationId);
-}
-
-wss.on("connection", (ws) => {
-  console.log("Client connected");
-  currentClient = ws;
-
-  ws.on("message", (message: string) => {
-    const { conversationId } = JSON.parse(message);
-    runConversation(conversationId);
-  });
-
-  ws.on("close", () => {
-    console.log("Client disconnected");
-    currentClient = null;
-  });
+server.listen(config.port, () => {
+  console.log(`Server running on http://localhost:${config.port}`);
 });
 
-server.listen(3000, () => {
-  console.log("Server running on http://localhost:3000");
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught exception:", error);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled rejection:", reason);
+  process.exit(1);
 });

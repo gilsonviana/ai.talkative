@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+.next
+.nuxt
+output
+.git
+.DS_Store
+*.lock
+*.min.*
